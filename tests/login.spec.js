@@ -1,0 +1,95 @@
+import { test, expect } from '@playwright/test';
+
+import { obterCodigo2FA } from '../support/db';
+
+import { LoginPage } from '../pages/LoginPage';
+
+import { DashPage } from '../pages/DashPage';
+
+import { LoginActions } from '../actions/LoginActions';
+
+import { cleanJobs, getJob } from '../support/redis';
+
+test('Nao deve logar quando o código de autenticacao é invalido', async ({ page }) => {
+  
+  const loginPage = new LoginPage(page)
+
+  const usuario ={
+    cpf: '00000014141',
+    senha: '147258'
+  }
+  await loginPage.acessaPagina()
+  
+  await loginPage.informaCpf(usuario.cpf)
+  await loginPage.informaSenha(usuario.senha)  
+
+  //temporario
+
+  await loginPage.informa2FA('123456')
+
+  await page.waitForTimeout(2000)
+
+  await expect(page.locator('span')).toContainText('Código inválido. Por favor, tente novamente.');
+});
+
+test('Deve acessar a conta do usuário', async ({ page }) => {
+  
+  const loginPage = new LoginPage(page)
+  const dashPage = new DashPage(page)
+
+  const usuario ={
+    cpf: '00000014141',
+    senha: '147258'
+  }
+
+  await  cleanJobs()
+
+  await loginPage.acessaPagina()
+  
+  await loginPage.informaCpf(usuario.cpf)
+  await loginPage.informaSenha(usuario.senha)  
+
+  //espera explicita no playwright
+  await page.getByRole('heading', {name: 'Verificação em duas etapas'})
+    .waitFor({timeout: 3000})
+
+  const codigo  = await getJob()
+
+  // const code = await obterCodigo2FA(usuario.cpf)
+
+  await loginPage.informa2FA(codigo)
+
+  //await page.waitForTimeout(2000)
+
+  await expect(await dashPage.obterSaldo()).toHaveText('R$ 5.000,00')
+
+});
+
+test('Deve acessar a conta do usuário com padrao actions', async ({ page }) => {
+  
+  const loginActions = new LoginActions(page)
+
+  const usuario ={
+    cpf: '00000014141',
+    senha: '147258'
+  }
+ await loginActions.acessaPagina()
+  
+  await loginActions.informaCpf(usuario.cpf)
+  await loginActions.informaSenha(usuario.senha)  
+
+  await page.getByRole('heading', {name: 'Verificação em duas etapas'})
+    .waitFor({timeout: 3000})
+
+  //temporario
+  //await page.waitForTimeout(3000)
+
+  const code = await obterCodigo2FA(usuario.cpf)
+
+  await loginActions.informa2FA(code)
+
+  await page.waitForTimeout(2000)
+
+  await expect(await loginActions.obterSaldo()).toHaveText('R$ 5.000,00')
+
+});
